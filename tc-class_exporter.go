@@ -29,9 +29,10 @@ type Stats struct {
 }
 
 type Class struct {
-    Class    string `json:"class"`
+    Kind     string `json:"class"`
     Handle   string `json:"handle"`
     Root     bool   `json:"root"`
+    Parent   string `json:"parent"`
     Leaf     string `json:"leaf"`
     Prio     int    `json:"prio"`
     Rate     uint64 `json:"rate"`
@@ -52,61 +53,56 @@ func main() {
     registry := prometheus.NewRegistry()
 
     // Create GaugeVec for class fields
-    rootGauge := prometheus.NewGaugeVec(prometheus.GaugeOpts{
-        Name: "tc_class_root",
-        Help: "parent qdisc is root qdisc",
-    }, []string{"class", "handle"})
     prioGauge := prometheus.NewGaugeVec(prometheus.GaugeOpts{
         Name: "tc_class_prio",
         Help: "class priority of leaf; lower are served first",
-    }, []string{"class", "handle"})
+    }, []string{"kind", "handle", "parent"})
     rateGauge := prometheus.NewGaugeVec(prometheus.GaugeOpts{
         Name: "tc_class_rate",
         Help: "rate allocated to this class (htb class can still borrow)",
-    }, []string{"class", "handle"})
+    }, []string{"kind", "handle", "parent"})
     ceilGauge := prometheus.NewGaugeVec(prometheus.GaugeOpts{
         Name: "tc_class_ceil",
         Help: "rate at which the class can send if its parent has bandwidth to spare (htb)",
-    }, []string{"class", "handle"})
+    }, []string{"kind", "handle", "parent"})
     burstGauge := prometheus.NewGaugeVec(prometheus.GaugeOpts{
         Name: "tc_class_burst",
         Help: "bytes that can be burst at ceil speed {computed}",
-    }, []string{"class", "handle"})
+    }, []string{"kind", "handle", "parent"})
     cburstGauge := prometheus.NewGaugeVec(prometheus.GaugeOpts{
         Name: "tc_class_cburst",
         Help: "bytes that can be burst at 'infinite' speed {computed}",
-    }, []string{"class", "handle"})
+    }, []string{"kind", "handle", "parent"})
     // Create GaugeVec for stats fields
     statsBytesGauge := prometheus.NewGaugeVec(prometheus.GaugeOpts{
         Name: "tc_class_stats_bytes",
         Help: "number of seen bytes",
-    }, []string{"class", "handle"})
+    }, []string{"kind", "handle", "parent"})
     statsPacketsGauge := prometheus.NewGaugeVec(prometheus.GaugeOpts{
         Name: "tc_class_stats_packets",
         Help: "number of seen packets",
-    }, []string{"class", "handle"})
+    }, []string{"kind", "handle", "parent"})
     statsDropsGauge := prometheus.NewGaugeVec(prometheus.GaugeOpts{
         Name: "tc_class_stats_drops",
         Help: "number of dropped packets",
-    }, []string{"class", "handle"})
+    }, []string{"kind", "handle", "parent"})
     statsOverlimitsGauge := prometheus.NewGaugeVec(prometheus.GaugeOpts{
         Name: "tc_class_stats_overlimits",
         Help: "number of enqueues over the limit",
-    }, []string{"class", "handle"})
+    }, []string{"kind", "handle", "parent"})
     statsRequeuesGauge := prometheus.NewGaugeVec(prometheus.GaugeOpts{
         Name: "tc_class_stats_requeues",
         Help: "number of requeues",
-    }, []string{"class", "handle"})
+    }, []string{"kind", "handle", "parent"})
     statsLendedGauge := prometheus.NewGaugeVec(prometheus.GaugeOpts{
         Name: "tc_class_stats_lended",
         Help: "lended tokens (htb)",
-    }, []string{"class", "handle"})
+    }, []string{"kind", "handle", "parent"})
     statsBorrowedGauge := prometheus.NewGaugeVec(prometheus.GaugeOpts{
         Name: "tc_class_stats_borrowed",
         Help: "borrowed tokens (htb)",
-    }, []string{"class", "handle"})
+    }, []string{"kind", "handle", "parent"})
 
-    registry.MustRegister(rootGauge)
     registry.MustRegister(prioGauge)
     registry.MustRegister(rateGauge)
     registry.MustRegister(ceilGauge)
@@ -139,7 +135,6 @@ func main() {
         }
 
         // Reset all metrics to zero before updating
-        rootGauge.Reset()
         prioGauge.Reset()
         rateGauge.Reset()
         ceilGauge.Reset()
@@ -154,20 +149,22 @@ func main() {
         statsBorrowedGauge.Reset()
 
         for _, class := range classes {
-            rootGauge.WithLabelValues(class.Class, class.Handle).Set(boolToFloat64(class.Root))
-            prioGauge.WithLabelValues(class.Class, class.Handle).Set(float64(class.Prio))
-            rateGauge.WithLabelValues(class.Class, class.Handle).Set(float64(class.Rate))
-            ceilGauge.WithLabelValues(class.Class, class.Handle).Set(float64(class.Ceil))
-            burstGauge.WithLabelValues(class.Class, class.Handle).Set(float64(class.Burst))
-            cburstGauge.WithLabelValues(class.Class, class.Handle).Set(float64(class.Cburst))
+            if class.Root {
+                class.Parent = "root"
+            }
+            prioGauge.WithLabelValues(class.Kind, class.Handle, class.Parent).Set(float64(class.Prio))
+            rateGauge.WithLabelValues(class.Kind, class.Handle, class.Parent).Set(float64(class.Rate))
+            ceilGauge.WithLabelValues(class.Kind, class.Handle, class.Parent).Set(float64(class.Ceil))
+            burstGauge.WithLabelValues(class.Kind, class.Handle, class.Parent).Set(float64(class.Burst))
+            cburstGauge.WithLabelValues(class.Kind, class.Handle, class.Parent).Set(float64(class.Cburst))
             // Set stats fields
-            statsBytesGauge.WithLabelValues(class.Class, class.Handle).Set(float64(class.Stats.Bytes))
-            statsPacketsGauge.WithLabelValues(class.Class, class.Handle).Set(float64(class.Stats.Packets))
-            statsDropsGauge.WithLabelValues(class.Class, class.Handle).Set(float64(class.Stats.Drops))
-            statsOverlimitsGauge.WithLabelValues(class.Class, class.Handle).Set(float64(class.Stats.Overlimits))
-            statsRequeuesGauge.WithLabelValues(class.Class, class.Handle).Set(float64(class.Stats.Requeues))
-            statsLendedGauge.WithLabelValues(class.Class, class.Handle).Set(float64(class.Stats.Lended))
-            statsBorrowedGauge.WithLabelValues(class.Class, class.Handle).Set(float64(class.Stats.Borrowed))
+            statsBytesGauge.WithLabelValues(class.Kind, class.Handle, class.Parent).Set(float64(class.Stats.Bytes))
+            statsPacketsGauge.WithLabelValues(class.Kind, class.Handle, class.Parent).Set(float64(class.Stats.Packets))
+            statsDropsGauge.WithLabelValues(class.Kind, class.Handle, class.Parent).Set(float64(class.Stats.Drops))
+            statsOverlimitsGauge.WithLabelValues(class.Kind, class.Handle, class.Parent).Set(float64(class.Stats.Overlimits))
+            statsRequeuesGauge.WithLabelValues(class.Kind, class.Handle, class.Parent).Set(float64(class.Stats.Requeues))
+            statsLendedGauge.WithLabelValues(class.Kind, class.Handle, class.Parent).Set(float64(class.Stats.Lended))
+            statsBorrowedGauge.WithLabelValues(class.Kind, class.Handle, class.Parent).Set(float64(class.Stats.Borrowed))
         }
 
         // Collect and write the metrics to the response writer
@@ -178,12 +175,4 @@ func main() {
     // Start the HTTP server to expose metrics
     log.Printf("Starting HTTP server on port %d", *port)
     log.Fatal(http.ListenAndServe(fmt.Sprintf(":%d", *port), nil))
-}
-
-// Helper function to convert bool to float64
-func boolToFloat64(b bool) float64 {
-    if b {
-        return 1.0
-    }
-    return 0.0
 }
