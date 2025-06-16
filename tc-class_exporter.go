@@ -137,7 +137,7 @@ func main() {
 
         // Execute the command and capture the output
         for _, nic := range nics {
-            cmd := exec.Command("/usr/sbin/tc", "-s", "-j", "class", "show", "dev", nic)
+            cmd := exec.Command("/usr/sbin/tc", "-name", "-s", "-j", "class", "show", "dev", nic)
             output, err := cmd.Output()
             if err != nil {
                 http.Error(w, fmt.Sprintf("Failed to execute command: %v", err), http.StatusInternalServerError)
