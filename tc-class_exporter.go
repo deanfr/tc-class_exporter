@@ -5,6 +5,7 @@ import (
 	"flag"
 	"fmt"
 	"log"
+	"net"
 	"net/http"
 	"os"
 	"os/exec"
@@ -103,7 +104,16 @@ var (
 
 func collectMetrics(nics []string) ([]Class, error) {
 	var classes []Class
+
+	validNics := make([]string, 0, len(nics))
+
 	for _, nic := range nics {
+		if _, err := net.InterfaceByName(nic); err == nil {
+			validNics = append(validNics, nic)
+		}
+	}
+
+	for _, nic := range validNics {
 		cmd := exec.Command("/usr/sbin/tc", "-name", "-s", "-j", "class", "show", "dev", nic)
 		output, err := cmd.Output()
 		if err != nil {
